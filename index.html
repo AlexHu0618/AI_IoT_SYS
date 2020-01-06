@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Thunder Monitor Sys</title>
+    <script src="https://lib.sinaapp.com/js/jquery/2.0.2/jquery-2.0.2.min.js"></script>
+    <script type="text/javascript">
+        var ws;
+
+        function onLoad() {
+            ws = new WebSocket("ws://192.168.0.69:8888/ws");
+            ws.onmessage = function (e) {
+                console.log(e.data);
+                // document.getElementById('contents').innerText(e.data)
+            }
+        }
+
+        function sendMsg() {
+            console.log('this');
+            ws.send(document.getElementById('msg').value);
+        }
+    </script>
+</head>
+
+<body onload="onLoad()">
+<div id="contents" style="height:500px;overflow:auto;"></div>
+<div>
+    <textarea id="msg"></textarea>
+    <button type="button" οnClick="sendMsg()">发送</button>
+</div>
+</body>
+</html>
