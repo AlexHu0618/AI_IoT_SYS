@@ -1,0 +1,80 @@
+# MySQL
+mysql:
+  host: 'localhost'
+  port: 3306
+  user: 'sa'
+  password: '123456'
+  charset: 'utf8mb4'
+
+# for InfluxDB
+influxdb:
+  host: 'localhost'
+  port: 8086
+  username: 'sa'
+  password: '123456'
+  database: 'test'
+  use_udp: True
+  udp_port: 4444
+
+
+# for RabbitMQ
+rabbitmq:
+  host: 'localhost'
+  username: 'Alex'
+  pwd: 'Alex11235813'
+
+
+# for Redis
+redis:
+  host: 'localhost'
+  port: 6379
+  max_conn: 100
+
+
+# for log
+log:
+  version: 1
+  disable_existing_loggers: false
+  formatters:
+    simple:
+      format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  handlers:
+    console:
+      class: logging.StreamHandler
+      level: DEBUG
+      formatter: simple
+      stream: ext://sys.stdout
+    info_file_handler:
+      class: logging.handlers.TimedRotatingFileHandler
+      level: INFO
+      formatter: simple
+      filename: ./logs/info.log
+      when: midnight
+      backupCount: 20
+      encoding: utf8
+      filters:
+      - filter_by_name
+    error_file_handler:
+      class: logging.handlers.RotatingFileHandler
+      level: ERROR
+      formatter: simple
+      filename: ./logs/errors.log
+      maxBytes: 10485760
+      backupCount: 20
+      encoding: utf8
+  filters:
+    filter_by_name:
+      class: logging.Filter
+      name: root
+  loggers:
+    mymodule:
+      level: INFO
+      handlers:
+      - info_file_handler
+      - error_file_handler
+      propagate: no
+  root:
+    level: INFO
+    handlers:
+    - info_file_handler
+    - error_file_handler
