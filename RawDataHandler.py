@@ -11,8 +11,7 @@ import pika
 import binascii
 import datetime
 from config import config_parser as cper
-from DBAdaptor import db
-from DBAdaptor import DBAdaptor
+from DBAdaptor import db_factory
 import operator
 
 
@@ -20,12 +19,13 @@ class RawDataHandler(object):
     """
     here need factory model
     """
-    def __init__(self):
+    def __init__(self, need_save=False):
         self.channel = self.__init_rabbitmq()
         self.channel.basic_consume('test', self.__callback, True)
-        self.redis = DBAdaptor('redis')
-        self.influxdb = db
+        self.redis = db_factory.create_conn('redis')
+        self.influxdb = db_factory.create_conn('influxdb')
         self.data_last = None
+        self.need_save = need_save
 
     def __init_rabbitmq(self):
         conf = cper.read_yaml_file('rabbitmq')
@@ -80,7 +80,8 @@ class RawDataHandler(object):
                 }
             }
         ]
-        self.influxdb.saveall(data=data)
+        if self.need_save:
+            self.influxdb.saveall(data=data)
         values = {'maxtc': maxtc,
                   'gr': gr,
                   'lc': lc,
@@ -102,5 +103,5 @@ class RawDataHandler(object):
 
 
 if __name__ == '__main__':
-    handler1 = RawDataHandler()
+    handler1 = RawDataHandler(need_save=True)
     handler1.start()
