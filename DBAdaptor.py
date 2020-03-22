@@ -15,11 +15,16 @@ import pymysql
 
 class DBAdaptor(object):
     def __init__(self):
-        pass
+        conf = cper.read_yaml_file('redis')
+        host = conf['host']
+        port = conf['port']
+        db = conf['db']
+        max_conn = conf['max_conn']
+        self.redis_pool = ConnectionPool(host=host, port=port, max_connections=max_conn, db=db)
 
     def create_conn(self, db_type='influxdb'):
         if db_type == 'redis':
-            return RedisDB()
+            return RedisDB(self.redis_pool)
         elif db_type == 'influxdb':
             return InfluxDB()
         elif db_type == 'mysql':
@@ -37,6 +42,9 @@ class DBAdaptor(object):
     def get_data(self):
         print('factory')
 
+    def __del__(self):
+        self.redis_pool.disconnect()
+
 
 class InfluxDB(DBAdaptor):
     def __init__(self):
@@ -45,29 +53,49 @@ class InfluxDB(DBAdaptor):
         port = conf['port']
         username = conf['username']
         pwd = conf['password']
-        database = conf['database']
+        self.database = conf['database']
         use_udp = conf['use_udp']
         udp_port = conf['udp_port']
-        self.client = InfluxDBClient(host=host, port=port, username=username, password=pwd, database=database)
+        self.client = InfluxDBClient(host=host, port=port, username=username, password=pwd, database=self.database)
         if self.client is None:
             print('ERROR! No InfluxDB connection was built!')
+        else:
+            self.__setting()
 
     def saveall(self, data):
         rsl = self.client.write_points(data)
         if not rsl:
             print('Fail to saveall!')
 
+    def exec_sql(self, sql):
+        rsl = self.client.query(sql)
+        points = rsl.get_points()
+        return points
+
+    def __setting(self):
+        rsl = self.client.get_list_database()
+        if {'name': self.database} not in rsl:
+            self.client.create_database(dbname=self.database)
+        rsl = self.client.get_list_retention_policies(database=self.database)
+        is_rp_existed = False
+        for i in rsl:
+            if i['name'] == 'rp_7d':
+                is_rp_existed = True
+            else:
+                continue
+        if not is_rp_existed:
+            self.client.create_retention_policy(name='rp_7d', duration='168h', replication='1', database=self.database,
+                                                default=True, shard_duration='24h')
+
+    def __del__(self):
+        pass
+
 
 class RedisDB(DBAdaptor):
-    def __init__(self):
-        conf = cper.read_yaml_file('redis')
-        host = conf['host']
-        port = conf['port']
-        max_conn = conf['max_conn']
-        POOL = ConnectionPool(host=host, port=port, max_connections=max_conn)
-        self.client = Redis(connection_pool=POOL)
+    def __init__(self, pool):
+        self.client = Redis(connection_pool=pool)
         if self.client is None:
-            print('ERROR! No RedisDB connection was built!')
+            print("Fail to build redis client")
 
     def get_conn(self):
         if self.client is not None:
@@ -76,6 +104,9 @@ class RedisDB(DBAdaptor):
             print("Fail because there is no redis conn")
             return None
 
+    def __del__(self):
+        pass
+
 
 class MysqlDB(DBAdaptor):
     def __init__(self):
@@ -83,14 +114,23 @@ class MysqlDB(DBAdaptor):
         host = conf['host']
         user = conf['user']
         pwd = conf['password']
+        db = conf['database']
         charset = conf['charset']
-        conn = pymysql.connect(host=host, user=user, password=pwd, charset=charset)
-        self.cursor = conn.cursor()
+        self.conn = pymysql.connect(host=host, user=user, password=pwd, database=db, charset=charset)
+        self.cursor = self.conn.cursor()
 
     def get_data(self, sql):
-        rsl = self.cursor.execute(sql)
+        self.cursor.execute(sql)
         rsl = self.cursor.fetchall()
         return rsl
+
+    def close(self):
+        self.cursor.close()
+        self.conn.close()
+
+    def __del__(self):
+        self.cursor.close()
+        self.conn.close()
 
 
 db_factory = DBAdaptor()
