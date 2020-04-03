@@ -8,11 +8,8 @@
 # @version : 0.1.0
 
 import pika
-import binascii
-import datetime
 from config import config_parser as cper
 from DBAdaptor import db_factory
-import operator
 import pickle
 
 
@@ -42,19 +39,24 @@ class RawDataHandler(object):
         return channel
 
     def __callback(self, ch, method, properties, body):
+        """
+        1\ get hash from redis by gateway_id;
+        2\
+        :param ch:
+        :param method:
+        :param properties:
+        :param body:
+        :return:
+        """
         data = pickle.loads(body)
         print('got data: ', data)
         gateway_id = data['gateway_id']
         if self.redis.exists(gateway_id):
             rsl = self.redis.hgetall(gateway_id)
             value = {k.decode(): v.decode() for k, v in rsl.items()}
-            print(value)
-            print(type(value))
             df_struct = list(map(int, value['df_struct'].split(',')))
             id_size = tuple(eval(value['id_size']))
-            print(gateway_id)
-            print(df_struct)
-            print(id_size)
+            table_name = value['table_name']
             rawdata = data['data_frame']
             map(float, rawdata)
             print(rawdata)
@@ -62,7 +64,7 @@ class RawDataHandler(object):
             points = []
             for index in range(min_num):
                 point = {
-                    'measurement': 'm_' + str(gateway_id),
+                    'measurement': table_name,
                     'tags': {
                         'map_tv_id': df_struct[index]
                     },
@@ -75,60 +77,6 @@ class RawDataHandler(object):
                 self.influxdb.saveall(data=points)
         else:
             print('No key %s in Redis!' % gateway_id)
-        # gateway_id = str(int.from_bytes(body[:2], 'big'))
-        # print('Gateway ID: ', gateway_id)
-        # node_id = str(int.from_bytes(body[2:6], 'big'))
-        # print('Node ID: ', node_id)
-        # tdt_str = binascii.b2a_hex(body[6:12]).decode()
-        # tdt = datetime.datetime.strptime(tdt_str, '%y%m%d%H%M%S')
-        # print('tdt: ', tdt)
-        # maxtc = int.from_bytes(body[12:14], 'big')
-        # print('maxtc: ', maxtc / 10)
-        # gr = int.from_bytes(body[14:16], 'big')
-        # lc = int.from_bytes(body[16:18], 'big')
-        # lv = int.from_bytes(body[18:20], 'big')
-        # temp = int.from_bytes(body[20:22], 'big')
-        # humi = int.from_bytes(body[22:23], 'big')
-        # ev = int.from_bytes(body[23:25], 'big')
-        # print('gr: ', gr / 1000)
-        # print('lc: ', lc / 100)
-        # print('lv: ', lv / 100)
-        # print('temp: ', temp / 10)
-        # print('humi: ', humi, '%')
-        # print('ev: ', ev / 10)
-        # data = [
-        #     {
-        #         'measurement': 'test_tab',
-        #         'time': datetime.datetime.utcfromtimestamp(tdt.timestamp()).isoformat(),
-        #         'tags': {
-        #             'gateway_id': gateway_id,
-        #             'node_id': node_id
-        #         },
-        #         'fields': {
-        #             'maxtc': maxtc,
-        #             'gr': gr,
-        #             'lc': lc,
-        #             'lv': lv,
-        #             'temp': temp,
-        #             'humi': humi,
-        #             'ev': ev
-        #         }
-        #     }
-        # ]
-        # if self.need_save:
-        #     self.influxdb.saveall(data=data)
-        # values = {'maxtc': maxtc,
-        #           'gr': gr,
-        #           'lc': lc,
-        #           'lv': lv,
-        #           'temp': temp,
-        #           'humi': humi,
-        #           'ev': ev}
-        # if operator.ne(values, self.data_last):  # change the redis while the values is different
-        #     self.data_last = values
-        #     rsl = self.redis.get_conn().hmset(str(gateway_id) + str(node_id), values)
-        #     if not rsl:
-        #         print('ERROR! Fail to refresh redis.')
 
     def start(self):
         try:

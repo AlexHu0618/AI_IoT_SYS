@@ -4,6 +4,7 @@ mysql:
   port: 3306
   user: 'sa'
   password: '123456'
+#  password: 'QQ23ti!#'  ## for minecloud
   database: 'iiot_sys'
   charset: 'utf8mb4'
 

@@ -73,19 +73,30 @@ class InfluxDB(DBAdaptor):
         return points
 
     def __setting(self):
+        """
+        1\ create database if not existed
+        2\ create rp if not existed
+        :return:
+        """
         rsl = self.client.get_list_database()
         if {'name': self.database} not in rsl:
             self.client.create_database(dbname=self.database)
         rsl = self.client.get_list_retention_policies(database=self.database)
-        is_rp_existed = False
+        is_rp_7d_existed = False
+        is_rp_30d_existed = False
         for i in rsl:
             if i['name'] == 'rp_7d':
-                is_rp_existed = True
+                is_rp_7d_existed = True
+            elif i['name'] == 'rp_30d':
+                is_rp_30d_existed = True
             else:
                 continue
-        if not is_rp_existed:
+        if not is_rp_7d_existed:
             self.client.create_retention_policy(name='rp_7d', duration='168h', replication='1', database=self.database,
                                                 default=True, shard_duration='24h')
+        if not is_rp_30d_existed:
+            self.client.create_retention_policy(name='rp_30d', duration='720h', replication='1', database=self.database,
+                                                default=False, shard_duration='24h')
 
     def __del__(self):
         pass

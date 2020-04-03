@@ -23,31 +23,29 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         1、加密验证授权连接（只允许我们的tcp client连接）；
         2、获取gateway_id判断是哪个用户的设备，（在平台注册设备时需要填入该gateway_id绑定用户，这里以mac代替）;
     """
-    data = None
-    gateway_id = None
-    df_struct = None
-    table_name = None
-    is_authed = False
-    dt_accessed = None  # time for building conn
-    dt_lost = None  # time for losting conn
-    dt_start = None  # time for starting to collect data
-    dt_end = None  # time for stopping to collect data
+    clients = {}
 
     def handle(self):
         try:
             while True:
                 self.data = self.request.recv(1024)
+                print(self.data)
                 data_recv = eval(str(self.data, encoding='utf-8'))
                 print(data_recv)
                 if data_recv['type'] == 2:  # data or info: 1-data; 2-info.
-                    if data_recv['status'] == 1:  # info data: 0-stop;1-start;
+                    if data_recv['status'] == 1:  # info data: 0-stop;1-start;2-quit;
                         self.dt_start = datetime.datetime.now()
+                        print('start')
                     elif data_recv['status'] == 0:
                         self.dt_end = datetime.datetime.now()
+                        print('stop')
+                    elif not data_recv:
+                        self.dt_end = datetime.datetime.now()
+                        print('quit')
+                        break
                     else:
-                        pass
+                        break
                 elif data_recv['type'] == 1:  # data
-                    print(data_recv)
                     data_recv['gateway_id'] = self.gateway_id
                     # push to RabbitMQ, just MQ but not p/b
                     data = pickle.dumps(data_recv)
@@ -56,11 +54,14 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                     print("It is the wrong data frame!")
         except Exception as e:
             print(e)
+            print(self.data)
             print(self.client_address, "连接断开")
+            self.dt_end = datetime.datetime.now()
         finally:
-            self.request.close()
+            pass
 
     def setup(self):
+        self.clients[self.request] = self.client_address
         if self.__auth_handler():
             print("Success to authorize before handling,连接建立：", self.client_address)
             self.request.sendall(b'success')
@@ -72,12 +73,10 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             else:
                 print('Not registered gateway_id, closing conn')
                 self.request.sendall(b'failed')
-                self.request.close()
                 self.finish()
         else:
             print('Fail to authorize, closing conn')
             self.request.sendall(b'failed')
-            self.request.close()
             self.finish()
 
     def finish(self):
@@ -87,6 +86,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         print('dt_start: ', self.dt_start)
         print('dt_end: ', self.dt_end)
         print('dt_lost: ', self.dt_lost)
+        self.clients.pop(self.request)
+        print('the remaining clients: ', self.clients)
 
     def __auth_handler(self):
         print('start to authorize')
@@ -106,6 +107,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         # verify gateway_id from MySQL
         sql = "SELECT gateway_id,df_struct,table_name FROM info_gateway_node WHERE gateway_id='%s'" % str(response, encoding='utf-8')
         rsl = mysql.get_data(sql=sql)
+        print(rsl)
         if rsl:
             self.gateway_id = rsl[0][0]
             self.df_struct = rsl[0][1]
@@ -123,7 +125,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         if self.gateway_id:
             frame_str = re.split(',', self.df_struct)
             frame = list(map(int, frame_str))
-            sql = "SELECT map_treenode_var_table.id,info_variable.type FROM map_treenode_var_table INNER JOIN info_variable ON map_treenode_var_table.variable_id = info_variable.id WHERE map_treenode_var_table.id IN " + str(tuple(frame))
+            sql = "SELECT map_treenode_var.id,info_variable.type FROM map_treenode_var INNER JOIN info_variable ON map_treenode_var.variable_id = info_variable.id WHERE map_treenode_var.id IN " + str(tuple(frame))
             rsl = mysql.get_data(sql=sql)
             if rsl:
                 data = {'table_name': self.table_name, 'df_struct': self.df_struct, 'id_size': str(rsl)}
@@ -148,10 +150,7 @@ redis = db_factory.create_conn('redis').get_conn()
 
 
 if __name__ == '__main__':
-    ip_list = ['127.0.0.1', '172.20.10.2']
-    user_key = ['4dab3575-8bf4-46dd-893e-8b8b477a139e']
-
-    HOST, PORT = "", 8808
+    HOST, PORT = "", 8809
     secret_key = b"!QAZ2wsx--Alex0618's screct"
     print('server is starting....')
 
