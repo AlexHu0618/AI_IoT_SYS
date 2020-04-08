@@ -33,15 +33,15 @@ class RawDataHandler(object):
         username = conf['username']
         pwd = conf['pwd']
         user_pwd = pika.PlainCredentials(username, pwd)
-        s_conn = pika.BlockingConnection(pika.ConnectionParameters(host=host, credentials=user_pwd))
+        s_conn = pika.BlockingConnection(pika.ConnectionParameters(host=host, credentials=user_pwd, heartbeat=0))
         channel = s_conn.channel()
         channel.queue_declare(queue=queue)
         return channel
 
     def __callback(self, ch, method, properties, body):
         """
-        1\ get hash from redis by gateway_id;
-        2\
+        1\ get rawdata from rabbitmq
+        2\ get hash from redis by gateway_id;
         :param ch:
         :param method:
         :param properties:
@@ -53,15 +53,16 @@ class RawDataHandler(object):
         gateway_id = data['gateway_id']
         if self.redis.exists(gateway_id):
             rsl = self.redis.hgetall(gateway_id)
+            print(rsl)
             value = {k.decode(): v.decode() for k, v in rsl.items()}
             df_struct = list(map(int, value['df_struct'].split(',')))
             id_size = tuple(eval(value['id_size']))
             table_name = value['table_name']
             rawdata = data['data_frame']
             map(float, rawdata)
-            print(rawdata)
             min_num = min(len(df_struct), len(rawdata))
             points = []
+            rtdata = []
             for index in range(min_num):
                 point = {
                     'measurement': table_name,
@@ -73,10 +74,14 @@ class RawDataHandler(object):
                     }
                 }
                 points.append(point)
+                rtdata.append(rawdata[index])
             if points:
                 self.influxdb.saveall(data=points)
+            # set redis by realtime data
+            self.redis.set(gateway_id + ':RTD', str(rtdata))
         else:
             print('No key %s in Redis!' % gateway_id)
+
 
     def start(self):
         try:

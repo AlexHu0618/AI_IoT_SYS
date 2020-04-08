@@ -33,7 +33,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 data_recv = eval(str(self.data, encoding='utf-8'))
                 print(data_recv)
                 if data_recv['type'] == 2:  # data or info: 1-data; 2-info.
-                    if data_recv['status'] == 1:  # info data: 0-stop;1-start;2-quit;
+                    if data_recv['status'] == 1:  # info: 0-stop;1-start;2-quit;
                         self.dt_start = datetime.datetime.now()
                         print('start')
                     elif data_recv['status'] == 0:
@@ -138,7 +138,7 @@ def init_rabbitmq():
     username = conf['username']
     pwd = conf['pwd']
     user_pwd = pika.PlainCredentials(username, pwd)
-    s_conn = pika.BlockingConnection(pika.ConnectionParameters(host=host, credentials=user_pwd))
+    s_conn = pika.BlockingConnection(pika.ConnectionParameters(host=host, credentials=user_pwd, heartbeat=0))
     channel = s_conn.channel()
     channel.queue_declare(queue='gateway')
     return channel
